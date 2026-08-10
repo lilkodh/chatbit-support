@@ -20,18 +20,18 @@ Project documentation.
 
 ## Git Branches
 
-main
-Final stable version.
-
 develop
-Main development branch.
+Target branch where validated work will be merged later.
+
+workflow
+Main active development & integration branch.
 
 feature/*
-Development branches for Jira tasks.
+Development branches created from `workflow` for Jira tasks.
 
 ## Branch Workflow
 
-develop
+workflow
 ↓
 feature/CHAT-XX-task-name
 ↓
@@ -41,15 +41,15 @@ push
 ↓
 Pull Request
 ↓
-develop
+workflow
 
-Final:
+Later (Milestone / Release):
 
+workflow
+↓
+Pull Request / Merge
+↓
 develop
-↓
-Pull Request
-↓
-main
 
 ## Branch Naming
 
@@ -79,9 +79,12 @@ chore: update configuration
 
 ## Important Rules
 
-- Do not work directly on main.
+- There is no main branch.
 - Do not work directly on develop.
+- Do not work directly on workflow.
+- All feature branches are created from workflow.
 - One Jira task = one feature branch.
-- Always create a Pull Request to develop.
+- Always create a Pull Request to workflow.
 - Keep commits clear and small.
-- Pull the latest develop before starting a task.
+- Pull the latest workflow before starting a task.
+- Merge workflow into develop when milestones are complete.
