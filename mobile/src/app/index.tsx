@@ -81,7 +81,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
          
-          <TouchableOpacity style={styles.loginButton}>
+          <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/new-request' as any)}>
             <Text style={styles.loginButtonText}>Login</Text>
             <Ionicons name="log-in-outline" size={20} color={Colors.white} />
           </TouchableOpacity>
