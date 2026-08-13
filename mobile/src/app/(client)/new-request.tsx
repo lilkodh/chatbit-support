@@ -11,6 +11,7 @@ export default function NewRequestScreen() {
 
   const handleStartChat = () => {
     console.log("Chat started with:", { subject, orderNumber, message });
+    router.push('/chat' as any);
   };
 
   return (
