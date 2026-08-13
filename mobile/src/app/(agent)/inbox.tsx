@@ -42,7 +42,7 @@ export default function AgentInboxScreen() {
 
       <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
         
-        <TouchableOpacity style={styles.chatItem} onPress={() => router.push('/(client)/chat')}>
+        <TouchableOpacity style={styles.chatItem} onPress={() => router.push('/(agent)/chat' as any)}>
           <View style={[styles.priorityBorder, { backgroundColor: '#A25946' }]} />
           <Image source={{ uri: 'https://i.pravatar.cc/150?img=11' }} style={styles.chatAvatar} />
           <View style={styles.chatContent}>
@@ -58,7 +58,7 @@ export default function AgentInboxScreen() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.chatItem} onPress={() => router.push('/(client)/chat')}>
+        <TouchableOpacity style={styles.chatItem} onPress={() => router.push('/(agent)/chat' as any)}>
           <View style={[styles.priorityBorder, { backgroundColor: 'transparent' }]} />
           <View style={[styles.chatAvatar, { backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' }]}>
             <Text style={{color: 'white', fontWeight: 'bold', fontSize: 16}}>SM</Text>
