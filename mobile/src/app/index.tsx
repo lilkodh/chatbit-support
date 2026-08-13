@@ -9,6 +9,13 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const handleLogin = () => {
+    if (role === 'client') {
+      router.push('/(client)/new-request' as any);
+    } else if (role ==='agent') {
+      router.push('/(agent)/inbox' as any);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -81,7 +88,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
          
-          <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/(agent)/inbox' as any)}>
+          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
             <Text style={styles.loginButtonText}>Login</Text>
             <Ionicons name="log-in-outline" size={20} color={Colors.white} />
           </TouchableOpacity>
