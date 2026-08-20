@@ -35,5 +35,10 @@ router.get(
   validate(getMessagesSchema, "query"),
   messageController.getMessages
 );
+router.patch(
+  "/:id/join",
+  authMiddleware,
+  conversationController.joinConversation
+);
 
 module.exports = router;

@@ -29,9 +29,32 @@ const getConversations = async (user) => {
     },
     order: [["created_at", "DESC"]],
   });
+  const joinConversation = async (conversationId, user) => {
+  if (user.role !== "agent") {
+    throw new Error("Only agents can join conversations");
+  }
+
+  const conversation = await Conversation.findByPk(conversationId);
+
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  if (conversation.status !== "pending") {
+    throw new Error("Conversation is not pending");
+  }
+
+  conversation.agent_id = user.id;
+  conversation.status = "in_progress";
+
+  await conversation.save();
+
+  return conversation;
+};
 };
 
 module.exports = {
   createConversation,
   getConversations,
+  joinConversation,
 };

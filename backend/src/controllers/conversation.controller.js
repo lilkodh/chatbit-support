@@ -29,9 +29,26 @@ const getConversations = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+  
+};
+const joinConversation = async (req, res, next) => {
+  try {
+    const conversation = await conversationService.joinConversation(
+      Number(req.params.id),
+      req.user
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: conversation,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = {
   createConversation,
   getConversations,
+  joinConversation,
 };
