@@ -40,5 +40,10 @@ router.patch(
   authMiddleware,
   conversationController.joinConversation
 );
+router.patch(
+  "/:id/close",
+  authMiddleware,
+  conversationController.closeConversation
+);
 
 module.exports = router;
