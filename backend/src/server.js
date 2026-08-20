@@ -2,6 +2,7 @@ const express = require("express");
 const sequelize = require("./config/database");
 const app = require("./app")
 require("dotenv").config();
+require("./models");
 
 
 const PORT = process.env.PORT||3000;
@@ -10,6 +11,9 @@ const startServer = async () => {
    await sequelize.authenticate();
    console.log("database is connected done hahaha");
    app.listen(PORT, () => { console.log(`the server is running in the port ${PORT}`)});
+   await sequelize.sync();
+
+    console.log("Database synchronized successfully");
 
 
  }catch(err){
