@@ -1,24 +1,41 @@
-const express = require("express");
 const sequelize = require("./config/database");
-const app = require("./app")
+const http = require("http");
+const app = require("./app");
+
 require("dotenv").config();
 require("./models");
 
+const { Server } = require("socket.io");
 
-const PORT = process.env.PORT||3000;
+const { setIO } = require("./sockets/socket.io");
+const setupSocket = require("./sockets/socket");
+
+const server = http.createServer(app);
+
+const io = new Server(server);
+
+setIO(io);
+setupSocket(io);
+
+const PORT = process.env.PORT || 3000;
+
 const startServer = async () => {
- try{
-   await sequelize.authenticate();
-   console.log("database is connected done hahaha");
-   app.listen(PORT, () => { console.log(`the server is running in the port ${PORT}`)});
-   await sequelize.sync();
+  try {
+    await sequelize.authenticate();
 
-    console.log("Database synchronized successfully");
+    console.log("Database connected");
 
+    await sequelize.sync();
 
- }catch(err){
-console.error("Database connection is failed ", err);
- }
+    console.log("Database synchronized");
 
+    server.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+
+  } catch (err) {
+    console.error("Database connection failed", err);
+  }
 };
+
 startServer();
