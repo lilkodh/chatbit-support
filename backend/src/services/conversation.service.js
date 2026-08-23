@@ -1,4 +1,5 @@
 const { Op } = require("sequelize");
+
 const { Conversation } = require("../models");
 
 const createConversation = async (userId, subject) => {
@@ -29,7 +30,9 @@ const getConversations = async (user) => {
     },
     order: [["created_at", "DESC"]],
   });
-  const joinConversation = async (conversationId, user) => {
+};
+
+const joinConversation = async (conversationId, user) => {
   if (user.role !== "agent") {
     throw new Error("Only agents can join conversations");
   }
@@ -51,7 +54,7 @@ const getConversations = async (user) => {
 
   return conversation;
 };
-};
+
 const closeConversation = async (conversationId, user) => {
   if (user.role !== "agent") {
     throw new Error("Only agents can close conversations");
