@@ -38,6 +38,14 @@ const joinConversation = async (req, res, next) => {
       req.user
     );
 
+    const io = getIO();
+
+    io.emit("conversation:updated", {
+      conversationId: conversation.id,
+      status: conversation.status,
+      agentId: conversation.agent_id,
+    });
+
     return res.status(200).json({
       success: true,
       data: conversation,
@@ -52,6 +60,14 @@ const closeConversation = async (req, res, next) => {
       Number(req.params.id),
       req.user
     );
+
+    const io = getIO();
+
+    io.emit("conversation:updated", {
+      conversationId: conversation.id,
+      status: conversation.status,
+      agentId: conversation.agent_id,
+    });
 
     return res.status(200).json({
       success: true,
