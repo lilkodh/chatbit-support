@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/server.js",
+    "predev": "fuser -k 3000/tcp 2>/dev/null || true",
+    "dev": "fuser -k 3000/tcp 2>/dev/null || true; nodemon src/server.js",
     "start": "node src/server.js"
   },
   "keywords": [],
