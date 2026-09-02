@@ -2,7 +2,7 @@ const { User } = require("../models");
 const { hashPassword, comparePassword } = require("../utils/password");
 const { generateToken } = require("../utils/jwt");
 
-const register = async ({ full_name, email, password }) => {
+const register = async ({ full_name, email, password, role }) => {
   const existingUser = await User.findOne({
     where: { email },
   });
@@ -17,6 +17,7 @@ const register = async ({ full_name, email, password }) => {
     full_name,
     email,
     password_hash,
+    role: role || 'client',
   });
 
   const token = generateToken(user);

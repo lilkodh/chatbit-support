@@ -1,106 +1,366 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { conversationService } from '../../services/api';
+import {
+  connectSocket,
+  joinConversationRoom,
+  leaveConversationRoom,
+  sendSocketMessage,
+  startTypingSocket,
+  stopTypingSocket,
+} from '../../services/socket';
+import { useAuth } from '../../context/AuthContext';
+
+const extractMessagesList = (dataObj: any): any[] => {
+  if (!dataObj) return [];
+  if (Array.isArray(dataObj)) return dataObj;
+  if (Array.isArray(dataObj.messages)) return dataObj.messages;
+  if (Array.isArray(dataObj.data?.messages)) return dataObj.data.messages;
+  if (Array.isArray(dataObj.data)) return dataObj.data;
+  return [];
+};
 
 export default function AgentChatScreen() {
+  const { user, isLoading: authLoading, logout: handleLogout } = useAuth();
+  const { id, subject } = useLocalSearchParams<{ id?: string; subject?: string }>();
+  const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(user);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [isOtherOnline, setIsOtherOnline] = useState(true);
+  const [isClosed, setIsClosed] = useState(false);
+  const [isAssigned, setIsAssigned] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const typingTimerRef = useRef<any>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['messages', id],
+    queryFn: () => conversationService.getMessages(id!, 1, 20),
+    enabled: !authLoading && !!id && !!user,
+  });
+
+  const messages = extractMessagesList(data?.data);
+
+  useEffect(() => {
+    if (user) {
+      setCurrentUser(user);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (data?.data?.conversation) {
+      const conv = data.data.conversation;
+      if (conv.status === 'closed') {
+        setIsClosed(true);
+      }
+      if (conv.status === 'in_progress' || conv.status === 'en_cours' || (currentUser && Number(conv.agent_id) === Number(currentUser.id))) {
+        setIsAssigned(true);
+      }
+    }
+  }, [data, currentUser]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+
+    let socketInstance: any = null;
+    let isMounted = true;
+
+    connectSocket().then((s) => {
+      if (!isMounted || !s) return;
+      socketInstance = s;
+
+      joinConversationRoom(id);
+
+      const handleNewMessage = (newMsg: any) => {
+        if (!isMounted) return;
+        if (Number(newMsg.conversation_id) === Number(id)) {
+          queryClient.setQueryData(['messages', id], (old: any) => {
+            const oldList = extractMessagesList(old?.data);
+            if (oldList.some((m: any) => Number(m.id) === Number(newMsg.id))) return old;
+            const updated = [...oldList, newMsg];
+            if (old?.data?.messages) {
+              return { ...old, data: { ...old.data, messages: updated } };
+            }
+            return { success: true, data: { messages: updated } };
+          });
+        }
+      };
+
+      const handleTypingUpdate = (typingData: { userId: number; isTyping: boolean }) => {
+        if (!isMounted) return;
+        if (currentUser && Number(typingData.userId) !== Number(currentUser.id)) {
+          setIsOtherTyping(typingData.isTyping);
+        }
+      };
+
+      const handlePresenceUpdate = (presenceData: { userId: number; isOnline: boolean }) => {
+        if (!isMounted) return;
+        if (currentUser && Number(presenceData.userId) !== Number(currentUser.id)) {
+          setIsOtherOnline(presenceData.isOnline);
+        }
+      };
+
+      const handleConversationUpdated = (convData: { conversationId: number; status: string; agentId?: number }) => {
+        if (!isMounted) return;
+        if (Number(convData.conversationId) === Number(id)) {
+          if (convData.status === 'closed') {
+            setIsClosed(true);
+          }
+          if (convData.status === 'in_progress' || convData.status === 'en_cours' || (currentUser && Number(convData.agentId) === Number(currentUser.id))) {
+            setIsAssigned(true);
+          }
+          queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        }
+      };
+
+      const handleSocketError = (err: { message: string }) => {
+        if (!isMounted) return;
+        setErrorMsg(err.message || 'Error sending message');
+      };
+
+      s.on('message:new', handleNewMessage);
+      s.on('typing:update', handleTypingUpdate);
+      s.on('presence:update', handlePresenceUpdate);
+      s.on('conversation:updated', handleConversationUpdated);
+      s.on('socket:error', handleSocketError);
+      s.on('error', handleSocketError);
+    });
+
+    return () => {
+      isMounted = false;
+      leaveConversationRoom(id);
+      if (socketInstance) {
+        socketInstance.off('message:new');
+        socketInstance.off('typing:update');
+        socketInstance.off('presence:update');
+        socketInstance.off('conversation:updated');
+        socketInstance.off('socket:error');
+        socketInstance.off('error');
+      }
+    };
+  }, [id, currentUser, user]);
+
+  const onLogoutPress = async () => {
+    await handleLogout();
+  };
+
+  const handleJoin = async () => {
+    if (!id) return;
+    try {
+      await conversationService.joinConversation(id);
+      setIsAssigned(true);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    } catch (err: any) {
+      setErrorMsg(err.response?.data?.message || 'Failed to join conversation');
+    }
+  };
+
+  const handleClose = async () => {
+    if (!id) return;
+    try {
+      await conversationService.closeConversation(id);
+      setIsClosed(true);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    } catch (err: any) {
+      setErrorMsg(err.response?.data?.message || 'Failed to close conversation');
+    }
+  };
+
+  const handleInputChange = (text: string) => {
+    setMessage(text);
+    if (!id || isClosed) return;
+
+    if (text.trim().length > 0) {
+      startTypingSocket(id);
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        stopTypingSocket(id);
+      }, 1500);
+    } else {
+      stopTypingSocket(id);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const textToSend = message.trim();
+    if (!textToSend || !id) return;
+    if (isClosed) {
+      setErrorMsg('Conversation is closed');
+      return;
+    }
+    if (!isAssigned) {
+      setErrorMsg('You must join this conversation first');
+      return;
+    }
+    setErrorMsg('');
+    setMessage('');
+    stopTypingSocket(id);
+
+    const s = await connectSocket();
+    if (!s || !s.connected) {
+      setErrorMsg('Socket re-connecting... Please try again in a moment');
+      return;
+    }
+
+    joinConversationRoom(id);
+    sendSocketMessage(id, textToSend);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.text} />
           </TouchableOpacity>
-          
+
           <View style={styles.profileContainer}>
-            <Image source={{ uri: 'https://i.pravatar.cc/150?img=11' }} style={styles.avatar} />
+            <View>
+              <Image
+                source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
+                style={styles.avatar}
+              />
+              <View
+                style={[
+                  styles.onlineIndicator,
+                  { backgroundColor: isOtherOnline ? '#4CAF50' : '#9E9E9E' },
+                ]}
+              />
+            </View>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.clientName}>Omar K.</Text>
-              <Text style={styles.clientOrder}>Order #1234</Text>
+              <Text style={styles.agentName}>{subject || 'Client Chat'}</Text>
+              <Text style={styles.agentRole}>
+                {isOtherTyping ? 'Typing...' : isClosed ? 'Closed' : isOtherOnline ? 'Online' : 'Offline'}
+              </Text>
             </View>
           </View>
-          
-          <TouchableOpacity style={styles.actionBtn}>
-            <Ionicons name="checkmark-done-circle-outline" size={24} color={Colors.primary} />
+
+          <TouchableOpacity onPress={onLogoutPress} style={{ padding: 4 }}>
+            <Ionicons name="log-out-outline" size={22} color="#D32F2F" />
           </TouchableOpacity>
         </View>
 
+        {!!errorMsg && (
+          <View style={{ backgroundColor: '#FFEBEE', padding: 8, alignItems: 'center' }}>
+            <Text style={{ color: '#D32F2F', fontSize: 13 }}>{errorMsg}</Text>
+          </View>
+        )}
+
+        <View style={styles.actionBar}>
+          {!isAssigned && !isClosed ? (
+            <TouchableOpacity style={styles.joinBtn} onPress={handleJoin}>
+              <Ionicons name="hand-left-outline" size={16} color={Colors.white} />
+              <Text style={styles.actionBtnText}>Join Conversation</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {!isClosed ? (
+            <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+              <Ionicons name="checkmark-circle-outline" size={16} color={Colors.white} />
+              <Text style={styles.actionBtnText}>Close Ticket</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.closedBadge}>
+              <Text style={styles.closedBadgeText}>Ticket Closed</Text>
+            </View>
+          )}
+        </View>
+
         <ScrollView contentContainerStyle={styles.chatContainer} showsVerticalScrollIndicator={false}>
-          
           <View style={styles.dateContainer}>
             <Text style={styles.dateText}>Today</Text>
           </View>
 
-          <View style={styles.messageWrapperClient}>
-            <View style={styles.bubbleClient}>
-              <Text style={styles.textClient}>I received the wrong item in my package. I ordered a blue rug but got a red one.</Text>
+          {isLoading ? (
+            <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 20 }} />
+          ) : !Array.isArray(messages) || messages.length === 0 ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={{ color: Colors.textLight }}>No messages in this request yet.</Text>
             </View>
-            <Text style={styles.timeClient}>10:45 AM</Text>
-          </View>
-
-          <View style={styles.messageWrapperAgent}>
-            <View style={styles.bubbleAgent}>
-              <Text style={styles.textAgent}>Hello Omar, I apologize for the mistake! Let me check your order right away and arrange a replacement.</Text>
-            </View>
-            <Text style={styles.timeAgent}>10:48 AM</Text>
-          </View>
-
+          ) : (
+            messages.map((msg: any) => {
+              const isMine = currentUser && Number(msg.sender_id) === Number(currentUser.id);
+              return (
+                <View
+                  key={msg.id || String(Math.random())}
+                  style={isMine ? styles.messageWrapperClient : styles.messageWrapperAgent}
+                >
+                  <View style={isMine ? styles.bubbleClient : styles.bubbleAgent}>
+                    <Text style={isMine ? styles.textClient : styles.textAgent}>{msg.content}</Text>
+                  </View>
+                  <Text style={isMine ? styles.timeClient : styles.timeAgent}>
+                    {msg.created_at || msg.sent_at ? new Date(msg.created_at || msg.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                  </Text>
+                </View>
+              );
+            })
+          )}
         </ScrollView>
 
         <View style={styles.inputSection}>
           <TouchableOpacity style={styles.attachBtn}>
-            <Ionicons name="document-text-outline" size={22} color={Colors.textLight} />
+            <Ionicons name="attach" size={22} color={Colors.textLight} />
           </TouchableOpacity>
-          
+
           <TextInput
             style={styles.textInput}
-            placeholder="Type your reply to Omar..."
-            placeholderTextColor={Colors.textLight}
+            placeholder={isClosed ? 'Conversation is closed' : !isAssigned ? 'Join to reply...' : 'Type your message...'}
+            placeholderTextColor="#A0AEC0"
             value={message}
-            onChangeText={setMessage}
+            onChangeText={handleInputChange}
+            editable={!isClosed && isAssigned}
           />
-          
-          <TouchableOpacity style={styles.sendBtn}>
+
+          <TouchableOpacity
+            style={[styles.sendBtn, (isClosed || !isAssigned) && { backgroundColor: '#CCC' }]}
+            onPress={handleSendMessage}
+            disabled={isClosed || !isAssigned}
+          >
             <Ionicons name="send" size={16} color={Colors.white} />
           </TouchableOpacity>
         </View>
-
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: Colors.white },
-  
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.white },
   backBtn: { marginRight: 12 },
   profileContainer: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   avatar: { width: 40, height: 40, borderRadius: 20 },
+  onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: '#4CAF50', borderWidth: 2, borderColor: Colors.white },
   headerTextContainer: { marginLeft: 12 },
-  clientName: { fontSize: 16, fontWeight: 'bold', color: Colors.text },
-  clientOrder: { fontSize: 12, color: '#A25946', fontWeight: '600' },
-  actionBtn: { padding: 4 },
-  
+  agentName: { fontSize: 16, fontWeight: 'bold', color: Colors.primary },
+  agentRole: { fontSize: 12, color: Colors.textLight },
+  actionBar: { flexDirection: 'row', padding: 8, gap: 8, backgroundColor: Colors.background, borderBottomWidth: 1, borderBottomColor: Colors.border, justifyContent: 'center' },
+  joinBtn: { backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, gap: 6 },
+  closeBtn: { backgroundColor: '#D32F2F', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, gap: 6 },
+  actionBtnText: { color: Colors.white, fontSize: 12, fontWeight: 'bold' },
+  closedBadge: { backgroundColor: '#9E9E9E', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16 },
+  closedBadgeText: { color: Colors.white, fontSize: 12, fontWeight: 'bold' },
   chatContainer: { padding: 16, paddingBottom: 20 },
   dateContainer: { alignItems: 'center', marginBottom: 20 },
   dateText: { fontSize: 12, color: Colors.text, backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' },
-  
-  messageWrapperClient: { alignItems: 'flex-start', marginBottom: 16, maxWidth: '85%' },
-  bubbleClient: { backgroundColor: Colors.background, padding: 14, borderRadius: 16, borderTopLeftRadius: 4 },
-  textClient: { fontSize: 14, color: Colors.text, lineHeight: 20 },
-  timeClient: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginLeft: 4 },
-  
-  messageWrapperAgent: { alignItems: 'flex-end', marginBottom: 16, alignSelf: 'flex-end', maxWidth: '85%' },
-  bubbleAgent: { backgroundColor: Colors.primary, padding: 14, borderRadius: 16, borderTopRightRadius: 4 },
-  textAgent: { fontSize: 14, color: Colors.white, lineHeight: 20 },
-  timeAgent: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginRight: 4 },
-  
+  messageWrapperAgent: { alignItems: 'flex-start', marginBottom: 16, maxWidth: '85%' },
+  bubbleAgent: { backgroundColor: Colors.background, padding: 14, borderRadius: 16, borderTopLeftRadius: 4 },
+  textAgent: { fontSize: 14, color: Colors.text, lineHeight: 20 },
+  timeAgent: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginLeft: 4 },
+  messageWrapperClient: { alignItems: 'flex-end', marginBottom: 16, alignSelf: 'flex-end', maxWidth: '85%' },
+  bubbleClient: { backgroundColor: Colors.primary, padding: 14, borderRadius: 16, borderTopRightRadius: 4 },
+  textClient: { fontSize: 14, color: Colors.white, lineHeight: 20 },
+  timeClient: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginRight: 4 },
   inputSection: { flexDirection: 'row', alignItems: 'center', padding: 12, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.white },
   attachBtn: { padding: 8 },
-  textInput: { flex: 1, backgroundColor: Colors.background, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, color: Colors.text, marginHorizontal: 8, minHeight: 40 },
-  sendBtn: { backgroundColor: Colors.primary, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }
+  textInput: { flex: 1, backgroundColor: '#F7FAFC', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, color: '#1A202C', marginHorizontal: 8, minHeight: 40 },
+  sendBtn: { backgroundColor: '#005C5D', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }
 });

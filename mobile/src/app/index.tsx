@@ -1,142 +1,134 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; 
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 import { router } from 'expo-router';
+import { authService } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen() {
-  const [role, setRole] = useState<'client' | 'agent'>('client');
+  const { login: setAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const handleLogin = () => {
-    if (role === 'client') {
-      router.push('/(client)/new-request' as any);
-    } else if (role ==='agent') {
-      router.push('/(agent)/inbox' as any);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setErrorMsg('Please enter both email and password.');
+      return;
+    }
+    setErrorMsg('');
+    setLoading(true);
+
+    try {
+      const { token, user } = await authService.login({ email, password });
+      await setAuth(token, user);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Login failed. Please check your credentials.';
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Ionicons name="chatbubbles-outline" size={24} color={Colors.primary} />
-            <Text style={styles.logoText}>ChatBit</Text>
-            <Text style={styles.companyText}>by Souq Express</Text>
+            <Ionicons name="chatbubbles" size={34} color="#FFFFFF" />
           </View>
-          <Ionicons name="help-circle-outline" size={24} color={Colors.textLight} />
+          <Text style={styles.brandTitle}>ChatBit</Text>
+          <Text style={styles.brandSubtitle}>Support Messaging Platform</Text>
         </View>
 
         <View style={styles.card}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue to ChatBit.</Text>
+          <Text style={styles.cardTitle}>Welcome Back</Text>
+
+          {errorMsg ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={18} color="#D32F2F" />
+              <Text style={styles.errorText}>{errorMsg}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email Address</Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail-outline" size={20} color="#64748B" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="name@example.com"
+                placeholderTextColor="#A0AEC0"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
           </View>
 
-          <Text style={styles.label}>I am a...</Text>
-          <View style={styles.roleContainer}>
-            <TouchableOpacity 
-              style={[styles.roleButton, role === 'client' && styles.roleButtonActive]}
-              onPress={() => setRole('client')}
-            >
-              <Ionicons name="person-outline" size={20} color={role === 'client' ? Colors.white : Colors.primary} />
-              <Text style={[styles.roleText, role === 'client' && styles.roleTextActive]}>Client</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.roleButton, role === 'agent' && styles.roleButtonActive]}
-              onPress={() => setRole('agent')}
-            >
-              <Ionicons name="headset-outline" size={20} color={role === 'agent' ? Colors.white : Colors.primary} />
-              <Text style={[styles.roleText, role === 'agent' && styles.roleTextActive]}>Agent</Text>
-            </TouchableOpacity>
-          </View>
-        
-          <Text style={styles.label}>Email Address</Text>
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={Colors.textLight} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="you@example.com"
-              placeholderTextColor={Colors.textLight}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-        
-          <View style={styles.passwordHeader}>
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <Text style={styles.forgotPassword}>Forgot password?</Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color="#64748B" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#A0AEC0"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={Colors.textLight} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.textLight}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={Colors.textLight} />
-            </TouchableOpacity>
-          </View>
-         
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Login</Text>
-            <Ionicons name="log-in-outline" size={20} color={Colors.white} />
+
+          <TouchableOpacity style={styles.submitBtn} onPress={handleLogin} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitBtnText}>Log In</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>Don't have an account?</Text>
             <TouchableOpacity onPress={() => router.push('/register')}>
-              <Text style={styles.registerText}>Register here</Text>
+              <Text style={styles.linkText}>Register</Text>
             </TouchableOpacity>
           </View>
         </View>
-
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.background },
-  container: { flex: 1, padding: 20, justifyContent: 'center' },
-  
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  logoText: { fontSize: 18, fontWeight: 'bold', color: Colors.primary },
-  companyText: { fontSize: 12, color: Colors.textLight, marginTop: 4 },
-  
-  card: { backgroundColor: Colors.white, padding: 24, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  titleContainer: { alignItems: 'center', marginBottom: 24 },
-  title: { fontSize: 24, fontWeight: 'bold', color: Colors.text },
-  subtitle: { fontSize: 14, color: Colors.textLight, marginTop: 8 },
-  
-  label: { fontSize: 12, fontWeight: 'bold', color: Colors.text, marginBottom: 8 },
-  roleContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  roleButton: { flex: 0.48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: Colors.border, gap: 8 },
-  roleButtonActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  roleText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  roleTextActive: { color: Colors.white },
-  
-  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 8, paddingHorizontal: 12, height: 50, marginBottom: 16 },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: Colors.text, fontSize: 14 },
-  passwordHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  forgotPassword: { fontSize: 12, color: Colors.textLight, marginBottom: 8, fontWeight: '600' },
-  
-  loginButton: { backgroundColor: Colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 8, marginTop: 10, gap: 8 },
-  loginButtonText: { color: Colors.white, fontSize: 16, fontWeight: 'bold' },
-  
-  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  footerText: { fontSize: 13, color: Colors.textLight },
-  registerText: { fontSize: 13, color: Colors.primary, fontWeight: 'bold' }
+  safeArea: { flex: 1, backgroundColor: Colors.primary },
+  container: { flex: 1, justifyContent: 'center', padding: 20 },
+  header: { alignItems: 'center', marginBottom: 26 },
+  logoContainer: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.25)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  brandTitle: { fontSize: 30, fontWeight: 'bold', color: '#FFFFFF' },
+  brandSubtitle: { fontSize: 14, color: '#FFFFFF', opacity: 0.9, marginTop: 4 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5 },
+  cardTitle: { fontSize: 22, fontWeight: 'bold', color: '#0F172A', marginBottom: 20, textAlign: 'center' },
+  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', padding: 12, borderRadius: 8, marginBottom: 16, gap: 8 },
+  errorText: { color: '#D32F2F', fontSize: 13, flex: 1 },
+  inputGroup: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 6 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, backgroundColor: '#F8FAFC', paddingHorizontal: 12, height: 48 },
+  inputIcon: { marginRight: 8 },
+  input: { flex: 1, height: '100%', color: '#0F172A', fontSize: 14, fontWeight: '500' },
+  eyeIcon: { padding: 4 },
+  submitBtn: { backgroundColor: Colors.primary, height: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  submitBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, gap: 6 },
+  footerText: { fontSize: 14, color: '#64748B' },
+  linkText: { fontSize: 14, fontWeight: 'bold', color: Colors.primary },
 });

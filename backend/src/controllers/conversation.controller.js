@@ -1,4 +1,5 @@
 const conversationService = require("../services/conversation.service");
+const { getIO } = require("../sockets/socket.io");
 
 const createConversation = async (req, res, next) => {
   try {

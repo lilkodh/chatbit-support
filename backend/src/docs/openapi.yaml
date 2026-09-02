@@ -1,0 +1,577 @@
+openapi: 3.0.3
+
+info:
+  title: ChatBit Support API
+  description: REST API for the ChatBit customer support application.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: Auth
+    description: Authentication
+  - name: Users
+    description: User operations
+  - name: Conversations
+    description: Conversation operations
+  - name: Messages
+    description: Message history
+
+paths:
+
+ 
+  /api/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "409":
+          description: Email already exists
+
+  /api/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+ 
+  /api/users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  
+  /api/conversations:
+    post:
+      tags:
+        - Conversations
+      summary: Create a conversation
+      security:
+        - bearerAuth: []
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationRequest"
+
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    get:
+      tags:
+        - Conversations
+      summary: Get conversations
+      description: Clients receive their conversations. Agents receive pending and in-progress conversations.
+      security:
+        - bearerAuth: []
+
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Conversation"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/conversations/{id}/join:
+    post:
+      tags:
+        - Conversations
+      summary: Agent joins a conversation
+      security:
+        - bearerAuth: []
+
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+
+      responses:
+        "200":
+          description: Conversation joined successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          description: Only agents can join conversations
+
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/conversations/{id}/close:
+    post:
+      tags:
+        - Conversations
+      summary: Close a conversation
+      security:
+        - bearerAuth: []
+
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+
+      responses:
+        "200":
+          description: Conversation closed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          description: Only the assigned agent can close the conversation
+
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  
+  /api/conversations/{id}/messages:
+    get:
+      tags:
+        - Messages
+      summary: Get conversation message history
+      security:
+        - bearerAuth: []
+
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+
+        - name: page
+          in: query
+          required: false
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+
+        - name: limit
+          in: query
+          required: false
+          description: Number of messages per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+
+      responses:
+        "200":
+          description: Message history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageHistoryResponse"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+        "403":
+          description: User does not have access to this conversation
+
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+
+components:
+
+  
+  
+  securitySchemes:
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+ 
+
+  parameters:
+
+    ConversationId:
+      name: id
+      in: path
+      required: true
+      description: Conversation ID
+      schema:
+        type: integer
+        example: 1
+
+ 
+
+  schemas:
+
+   
+
+    RegisterRequest:
+      type: object
+      required:
+        - full_name
+        - email
+        - password
+
+      properties:
+
+        full_name:
+          type: string
+          example: Khalid Drihem
+
+        email:
+          type: string
+          format: email
+          example: khalid@example.com
+
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: password123
+
+        role:
+          type: string
+          enum:
+            - client
+            - agent
+          default: client
+          example: client
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+
+      properties:
+
+        email:
+          type: string
+          format: email
+          example: khalid@example.com
+
+        password:
+          type: string
+          format: password
+          example: password123
+
+    AuthResponse:
+      type: object
+      properties:
+
+        success:
+          type: boolean
+          example: true
+
+        data:
+          type: object
+          properties:
+
+            user:
+              $ref: "#/components/schemas/User"
+
+            token:
+              type: string
+              description: JWT access token
+              example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+   
+
+    User:
+      type: object
+      properties:
+
+        id:
+          type: integer
+          example: 1
+
+        full_name:
+          type: string
+          example: Khalid Drihem
+
+        email:
+          type: string
+          format: email
+          example: khalid@example.com
+
+        role:
+          type: string
+          enum:
+            - client
+            - agent
+          example: client
+
+        is_online:
+          type: boolean
+          example: true
+
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-23T10:00:00Z"
+
+    UserResponse:
+      type: object
+      properties:
+
+        success:
+          type: boolean
+          example: true
+
+        data:
+          $ref: "#/components/schemas/User"
+
+  
+
+    CreateConversationRequest:
+      type: object
+      required:
+        - subject
+
+      properties:
+
+        subject:
+          type: string
+          example: I need help with my order
+
+    Conversation:
+      type: object
+      properties:
+
+        id:
+          type: integer
+          example: 1
+
+        subject:
+          type: string
+          example: I need help with my order
+
+        client_id:
+          type: integer
+          example: 1
+
+        agent_id:
+          type: integer
+          nullable: true
+          example: 2
+
+        status:
+          type: string
+          enum:
+            - pending
+            - in_progress
+            - closed
+          example: in_progress
+
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-08-23T10:00:00Z"
+
+    ConversationResponse:
+      type: object
+      properties:
+
+        success:
+          type: boolean
+          example: true
+
+        data:
+          $ref: "#/components/schemas/Conversation"
+    Message:
+      type: object
+      properties:
+
+        id:
+          type: integer
+          example: 1
+
+        conversation_id:
+          type: integer
+          example: 1
+
+        sender_id:
+          type: integer
+          example: 2
+
+        content:
+          type: string
+          example: Hello, how can I help you?
+
+        is_read:
+          type: boolean
+          example: false
+
+        sent_at:
+          type: string
+          format: date-time
+          example: "2026-08-23T10:05:00Z"
+
+    MessageHistoryResponse:
+      type: object
+      properties:
+
+        success:
+          type: boolean
+          example: true
+
+        data:
+          type: object
+          properties:
+
+            messages:
+              type: array
+              items:
+                $ref: "#/components/schemas/Message"
+
+            pagination:
+              type: object
+              properties:
+
+                page:
+                  type: integer
+                  example: 1
+
+                limit:
+                  type: integer
+                  example: 20
+
+                total:
+                  type: integer
+                  example: 50
+
+                totalPages:
+                  type: integer
+                  example: 3
+
+ 
+  responses:
+
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Invalid request data
+
+    Unauthorized:
+      description: Authentication required or token is invalid
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Unauthorized
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Conversation not found
